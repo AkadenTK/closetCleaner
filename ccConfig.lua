@@ -1,5 +1,5 @@
 -- Jobs you want to execute with, recomment put all active jobs you have lua for will look for <job>.lua or <playername>_<job>.lua files
-ccjobs = { 'BLM', 'BLU', 'BRD', 'BST', 'DRG', 'GEO', 'MNK', 'NIN', 'RNG', 'RUN', 'SAM', 'SCH', 'SMN', 'THF', 'WAR', 'WHM' }
+ccjobs = { 'COR', 'RDM', 'RUN', 'MNK', 'NIN', 'BLU', 'WAR', 'DRG', 'SMN', 'SAM', 'THF', 'DNC', 'BLM', 'SCH' }
 -- Put any items in your inventory here you don't want to show up in the final report
 -- recommended for furniture, food, meds, pop items or any gear you know you want to keep for some reason
 -- supports lua regex syntax, put each separate one as its own entry in the table
@@ -24,6 +24,6 @@ ccignore = { "Rem's Tale*", "Storage Slip %d+", "Deed of*", "%a+ Virtue", "Dragu
 -- Set to nil or delete for unlimited
 ccmaxuse = nil
 -- List bags you want to not check against, needs to match "Location" column in <player>_report.txt
-skipBags = S{ 'Storage', 'Temporary' }
+skipBags = S{ 'Storage', 'Temporary', 'Safe', 'Safe 2', 'Locker', 'Satchel', 'Sack', 'Inventory', 'Recycle', 'Case' }
 -- this prints out the _sets _ignored and _inventory files
 ccDebug = false

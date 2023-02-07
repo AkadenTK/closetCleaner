@@ -153,7 +153,6 @@ windower.register_event('addon command',function (...)
 	itemsBylongName = T{}
 	itemsByName = T{}
 	inventoryGear = T{}
-	gsGear = T{}
 	for k,v in pairs(res.items) do
 		itemsBylongName[res.items[k].enl:lower()] = k
 		itemsByName[res.items[k].en:lower()] = k
@@ -179,7 +178,7 @@ function export_inv(path)
 		finv:write('=====================\n\n')
 	end
 		
-	local item_list = T{}
+	local inventoryGear = T{}
 	checkbag = true 
 	for n = 0, #res.bags do
 		if not skipBags:contains(res.bags[n].english) then
@@ -187,21 +186,15 @@ function export_inv(path)
 				if v.name ~= empty then
 					local slot = xmlify(tostring(v.slot))
 					local name = xmlify(tostring(v.name)):gsub('NUM1','1')
-					
-					if itemsByName[name:lower()] ~= nil then
-						itemid = itemsByName[name:lower()]
-					elseif itemsBylongName[name:lower()] ~= nil then
-						itemid = itemsBylongName[name:lower()]
+					local itemid = itemsByName[name:lower()] or itemsBylongName[name:lower()]
+					if itemid then
+						if ccDebug then
+							finv:write("Name: "..name.." Slot: "..slot.." Bag: "..res.bags[n].english.."\n")
+						end
+						if inventoryGear[itemid] == nil then inventoryGear[itemid] = S{} end
+						inventoryGear[itemid]:add(res.bags[n].english)
 					else
 						print("Item: "..name.." not found in resources!")
-					end
-					if ccDebug then
-						finv:write("Name: "..name.." Slot: "..slot.." Bag: "..res.bags[n].english.."\n")
-					end
-					if inventoryGear[itemid] == nil then 
-						inventoryGear[itemid] = res.bags[n].english
-					else
-						inventoryGear[itemid] = inventoryGear[itemid]..", "..res.bags[n].english
 					end
 				end
 			end
@@ -211,10 +204,12 @@ function export_inv(path)
 		finv:close()
 		print("File created: "..reportName)
 	end
+	return inventoryGear
 end
 
 -- Dummy include function, ignore some search known paths for others
 function include(f)
+	if f and type(f) == 'string' and not f:endswith('.lua') then f = f..'.lua' end
 	-- No need to do anything with this
 	if f == 'organizer-lib.lua' then
 		return
@@ -249,7 +244,7 @@ function include(f)
 end
 
 -- sets the 'sets' and puts them into supersets based off file name. 
-function extract_sets(file) 
+function extract_sets(file)
 	dofile(file)
 	if get_sets ~= nil then
 		get_sets()
@@ -269,11 +264,7 @@ function export_sets(path)
 		fsets:write('=====================\n\n')
 	end
 		
-	supersets = {}
-	job_used = T{}
-	job_logged = T()
-	info = {}
-	gear = {}
+	local supersets = {}
 	gearswap.res = res
 	
 	fpath = windower.addon_path:gsub('\\','/')
@@ -282,6 +273,7 @@ function export_sets(path)
 	gspath = fpath:gsub('closetcleaner\/','')..'gearswap/'
 	dpath = gspath..'data/'
 	for i,v in ipairs(ccjobs) do
+		player.main_job = v
 		sets = {}
 		lname = string.lower(dpath..player.name..'_'..v..'.lua')
 		lgname = string.lower(dpath..player.name..'_'..v..'_gear.lua')
@@ -300,76 +292,67 @@ function export_sets(path)
 		end
 	end
 	
-	list_sets( supersets , fsets ) 
+	local job_used, n_sets = list_sets( supersets , fsets ) 
 	if ccDebug then
 		fsets:close()
 		print("File created: "..reportName)
 	end
+
+	return job_used, n_sets
 end
 
+local equip_slots = S{"main", "sub", "range", "ranged", "ammo", "head", "neck", "left_ear", "right_ear", "body", "hands", "left_ring", "right_ring", "back", "waist", "legs", "feet", "ear1", "ear2", "ring1", "ring2", "lear", "rear", "lring", "rring"}
 function list_sets ( t, f )  
-	write_sets = T{}
-	local print_r_cache={}
-    local function sub_print_r(t,fromTab)
+	local job_used = T{}
+	local n_sets = T{}
+	local visited_sets = S{}
+	local function sub_print_r(t, job, breadcrumbs)
 		if (type(t)=="table") then
-			for pos,val in pairs(t) do
-				if S{"WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD", "RNG", "SAM", "NIN", "DRG", "SMN", "BLU", "COR", "PUP", "DNC", "SCH", "GEO", "RUN"}:contains(pos) then
-					job = pos
-				end
-				if (type(val)=="table") then
-					sub_print_r(val,job)
-				elseif (type(val)=="string") then
-					if val ~= "" and val ~= "empty" then 
-						if S{"name", "main", "sub", "range", "ammo", "head", "neck", "left_ear", "right_ear", "body", "hands", "left_ring", "right_ring", "back", "waist", "legs", "feet", "ear1", "ear2", "ring1", "ring2", "lear", "rear", "lring", "rring"}:contains(pos) then
-							if itemsByName[val:lower()] ~= nil then
-								itemid = itemsByName[val:lower()]
-							elseif itemsBylongName[val:lower()] ~= nil then
-								itemid = itemsBylongName[val:lower()]
-							else
-								print("Item: '"..val.."' not found in resources! "..pos)
-							end
-							if write_sets[itemid] == nil then
-								write_sets[itemid] = 1
-								if job_used[itemid] == nil then
-									job_used[itemid] = job
-									job_logged[itemid..job] = 1
-								else
-									job_used[itemid] = job_used[itemid]..","..job
-									job_logged[itemid..job] = 1
-								end
-							else	
-								write_sets[itemid] = write_sets[itemid] + 1
-								if job_logged[itemid..job] == nil then
-									job_used[itemid] = job_used[itemid]..","..job
-									job_logged[itemid..job] = 1
-								end
-							end
+			for key,val in pairs(t) do
+				if equip_slots:contains(key) then
+					-- this value is equipment, rather than a subset.
+					if type(val) == 'table' then
+						-- this piece has augments. just use the piece name
+						val = val.name
+					end
+					if type(val) == 'string' and val ~= "" and val ~= "empty" then
+						local itemid = itemsByName[val:lower()] or itemsBylongName[val:lower()]
+						if itemid then
+							n_sets[itemid] = (n_sets[itemid] or 0) + 1
+							if job_used[itemid] == nil then job_used[itemid] = S{} end
+							job_used[itemid]:add(job)
+						else
+							print("Item: '"..val.."' not found in resources! Job: "..job..", Breadcrumbs: "..breadcrumbs:concat('.'))
 						end
 					end
-				else
-					print("Error: Val needs to be table or string")
+				elseif (type(val)=="table") then
+					if not visited_sets[val] then 
+						visited_sets:add(val)
+						local new_crumbs = breadcrumbs:copy()
+						new_crumbs:append(key)
+						sub_print_r(val, job, new_crumbs)
+					end
 				end
 			end
 		end
-    end
-    sub_print_r(t,nil)
+	end
+	for job, t in pairs(t) do
+		sub_print_r(t, job, T{})
+	end
 	if ccDebug then
-		data = T{"Name", " | ", "Count", " | ", "Jobs", " | ", "Long Name"}
-		form = T{"%22s", "%3s", "%10s", "%3s", "%88s", "%3s", "%60s"}
+		local data = T{"Name", " | ", "Count", " | ", "Jobs", " | ", "Long Name"}
+		local form = T{"%22s", "%3s", "%10s", "%3s", "%88s", "%3s", "%60s"}
 		print_row(f, data, form)
 		print_break(f, form)
 		f:write('\n')
-		for k,v in pairs(write_sets) do
-			data = T{res.items[k].en, " | ", tostring(v), " | ", job_used[k], " | ", res.items[k].enl}
+		for k,v in pairs(n_sets) do
+			data = T{res.items[k].en, " | ", tostring(v), " | ", job_used[k]:concat(','), " | ", res.items[k].enl}
 			print_row(f, data, form)
-			gsGear[k] = v
 		end
 		f:write()
-	else
-		for k,v in pairs(write_sets) do
-			gsGear[k] = v
-		end
 	end
+
+	return job_used, n_sets
 end
 
 -- pass in file handle and a table of formats and table of data
@@ -397,15 +380,15 @@ function run_report(path)
 	local f = io.open(mainReportName,'w+')
 	f:write('closetCleaner Report:\n')
 	f:write('=====================\n\n')
-	export_inv(path)
-	export_sets(path)
+	local inventoryGear = export_inv(path)
+	local job_used, n_sets = export_sets(path)
 	for k,v in pairs(inventoryGear) do
-		if gsGear[k] == nil then
-			gsGear[k] = 0
+		if n_sets[k] == nil then
+			n_sets[k] = 0
 		end
 	end
-	data = T{"Name", " | ", "Count", " | ", "Location", " | ", "Jobs Used", " | ", "Long Name"}
-	form = T{"%25s", "%3s", "%10s", "%3s", "%20s", "%3s", "%-88s", "%3s", "%60s"}
+	local data = T{"Name", " | ", "Count", " | ", "Location", " | ", "Jobs Used", " | ", "Long Name"}
+	local form = T{"%25s", "%3s", "%10s", "%3s", "%20s", "%3s", "%-88s", "%3s", "%60s"}
 	print_row(f, data, form)
 	print_break(f, form)
 	if ccDebug then
@@ -416,20 +399,16 @@ function run_report(path)
 		print_row(f2, data, form)
 		print_break(f2, form)
 	end
-	for k,v in spairs(gsGear, function(t,a,b) return t[b] > t[a] end) do
+	for k,v in spairs(n_sets, function(t,a,b) return t[b] > t[a] end) do
 		if ccmaxuse == nil or v <= ccmaxuse then
 			printthis = 1
 			if not job_used[k] then
-				job_used[k] = " "
+				job_used[k] = S{}
 			end
 			for i,s in ipairs(ccignore) do
 				if string.match(res.items[k].en, s) or string.match(res.items[k].en, s) then
 					printthis = nil
-					if inventoryGear[k] == nil then
-						data = T{res.items[k].en, " | ", tostring(v), " | ", "NOT FOUND", " | ", job_used[k], " | ", res.items[k].enl}
-					else
-						data = T{res.items[k].en, " | ", tostring(v), " | ", inventoryGear[k], " | ", job_used[k], " | ", res.items[k].enl}
-					end
+					data = T{res.items[k].en, " | ", tostring(v), " | ", (inventoryGear[k] == nil and "NOT FOUND") or inventoryGear[k]:concat(','), " | ", job_used[k]:concat(','), " | ", res.items[k].enl}
 					if ccDebug then
 						print_row(f2, data, form)
 					end
@@ -437,11 +416,7 @@ function run_report(path)
 				end 
 			end
 			if printthis then
-				if inventoryGear[k] == nil then
-					data = T{res.items[k].en, " | ", tostring(v), " | ", "NOT FOUND", " | ", job_used[k], " | ", res.items[k].enl}
-				else
-					data = T{res.items[k].en, " | ", tostring(v), " | ", inventoryGear[k], " | ", job_used[k], " | ", res.items[k].enl}
-				end
+				data = T{res.items[k].en, " | ", tostring(v), " | ", (inventoryGear[k] == nil and "NOT FOUND") or inventoryGear[k]:concat(','), " | ", job_used[k]:concat(','), " | ", res.items[k].enl}
 				print_row(f, data, form)
 			end
 		end
